@@ -1,4 +1,3 @@
-import nacl from "tweetnacl";
 import { createDoubleRatchetSession, decodeUTF8, encodeUTF8 } from "./index.js";
 
 const alice = createDoubleRatchetSession();
