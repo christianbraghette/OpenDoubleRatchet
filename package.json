@@ -1,5 +1,5 @@
 {
-  "name": "doubleratchet",
+  "name": "@queenzeinaproductions/doubleratchet",
   "version": "1.0.0",
   "description": "Double Ratchet Algoritm implementation in TypeScript",
   "keywords": [
