@@ -1,5 +1,5 @@
 {
-  "name": "@queenzeinaproductions/doubleratchet",
+  "name": "open-double-ratchet",
   "version": "1.0.0",
   "description": "Double Ratchet Algoritm implementation in TypeScript",
   "keywords": [
@@ -9,13 +9,13 @@
     "public",
     "curve25519"
   ],
-  "homepage": "https://github.com/christianbraghette/DoubleRatchet#readme",
+  "homepage": "https://github.com/christianbraghette/OpenDoubleRatchet#readme",
   "bugs": {
-    "url": "https://github.com/christianbraghette/DoubleRatchet/issues"
+    "url": "https://github.com/christianbraghette/OpenDoubleRatchet/issues"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/christianbraghette/DoubleRatchet.git"
+    "url": "git+https://github.com/christianbraghette/OpenDoubleRatchet.git"
   },
   "license": "GPL-3.0-or-later",
   "author": "Christian Braghette",

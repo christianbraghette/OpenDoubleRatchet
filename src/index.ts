@@ -210,7 +210,7 @@ export class EncryptedPayload implements EncryptedPayload {
     }
 }
 
-export class EncryptedPayloadConstructor extends Uint8Array implements EncryptedPayload {
+class EncryptedPayloadConstructor extends Uint8Array implements EncryptedPayload {
     public static readonly signatureLength = nacl.sign.signatureLength;
     public static readonly secretKeyLength = nacl.box.secretKeyLength;
     public static readonly publicKeyLength = nacl.box.publicKeyLength;
