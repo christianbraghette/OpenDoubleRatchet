@@ -1,0 +1,10 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+const index_js_1 = require("./index.js");
+const alice = (0, index_js_1.createDoubleRatchetSession)();
+const bob = (0, index_js_1.createDoubleRatchetSession)(alice.publicKey);
+const ping = bob.encrypt((0, index_js_1.decodeUTF8)("Ping"));
+console.log(ping === null || ping === void 0 ? void 0 : ping.decode());
+console.log((0, index_js_1.encodeUTF8)(alice.decrypt(ping)));
+//const pong = alice.encrypt(decodeUTF8("Pong"), aliceSign.secretKey);
+//console.log(encodeUTF8(bob.decrypt(pong!, aliceSign.publicKey)));
