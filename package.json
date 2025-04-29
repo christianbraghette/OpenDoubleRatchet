@@ -2,20 +2,36 @@
   "name": "doubleratchet",
   "version": "1.0.0",
   "description": "Double Ratchet Algoritm implementation in TypeScript",
+  "keywords": [
+    "cryptography",
+    "encrypt",
+    "key",
+    "public",
+    "curve25519"
+  ],
+  "homepage": "https://github.com/christianbraghette/DoubleRatchet#readme",
+  "bugs": {
+    "url": "https://github.com/christianbraghette/DoubleRatchet/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/christianbraghette/DoubleRatchet.git"
+  },
   "license": "GPL-3.0-or-later",
   "author": "Christian Braghette",
   "type": "commonjs",
   "main": "index.js",
+  "types": "./index.d.ts",
   "scripts": {
     "test": "tsc && node ./build/test.js",
     "build": "tsc && node ./build/build.js"
-  },
-  "devDependencies": {
-    "@types/node": "^22.15.3"
   },
   "dependencies": {
     "fast-sha256": "^1.3.0",
     "tweetnacl": "^1.0.3",
     "tweetnacl-util": "^0.15.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.3"
   }
 }
