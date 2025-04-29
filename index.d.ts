@@ -37,30 +37,3 @@ export interface EncryptedPayload extends Uint8Array {
 export declare class EncryptedPayload implements EncryptedPayload {
     static from(array: Uint8Array): EncryptedPayload;
 }
-export declare class EncryptedPayloadConstructor extends Uint8Array implements EncryptedPayload {
-    static readonly signatureLength: number;
-    static readonly secretKeyLength: number;
-    static readonly publicKeyLength: number;
-    static readonly keyLength: number;
-    static readonly nonceLength: number;
-    static readonly maxCount = 65536;
-    static readonly countLength = 2;
-    constructor(count: number | Uint8Array, previus: number | Uint8Array, publicKey: Uint8Array, nonce: Uint8Array, ciphertext: Uint8Array);
-    constructor(encrypted: Uint8Array | EncryptedPayload);
-    get count(): number;
-    get previous(): number;
-    get publicKey(): Uint8Array;
-    get nonce(): Uint8Array;
-    get ciphertext(): Uint8Array;
-    encode(): Uint8Array;
-    decode(): {
-        count: number;
-        previus: number;
-        publicKey: string;
-        nonce: string;
-        ciphertext: string;
-    };
-    toString(): string;
-    toJSON(): string;
-    static from(array: Uint8Array): EncryptedPayloadConstructor;
-}

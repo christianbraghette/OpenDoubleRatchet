@@ -3,7 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.EncryptedPayloadConstructor = exports.EncryptedPayload = exports.DoubleRatchetSession = void 0;
+exports.EncryptedPayload = exports.DoubleRatchetSession = void 0;
 exports.encodeUTF8 = encodeUTF8;
 exports.decodeUTF8 = decodeUTF8;
 exports.encodeBase64 = encodeBase64;
@@ -236,7 +236,6 @@ class EncryptedPayloadConstructor extends Uint8Array {
         return new EncryptedPayloadConstructor(array);
     }
 }
-exports.EncryptedPayloadConstructor = EncryptedPayloadConstructor;
 EncryptedPayloadConstructor.signatureLength = tweetnacl_1.default.sign.signatureLength;
 EncryptedPayloadConstructor.secretKeyLength = tweetnacl_1.default.box.secretKeyLength;
 EncryptedPayloadConstructor.publicKeyLength = tweetnacl_1.default.box.publicKeyLength;
