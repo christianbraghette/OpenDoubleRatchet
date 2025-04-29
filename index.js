@@ -1,4 +1,22 @@
 "use strict";
+/**
+ * Open Double Ratchet Algorithm
+ *
+ * Copyright (C) 2025  Christian Braghette
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>
+ */
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
@@ -14,20 +32,50 @@ exports.createDoubleRatchetSession = createDoubleRatchetSession;
 const fast_sha256_1 = require("fast-sha256");
 const tweetnacl_1 = __importDefault(require("tweetnacl"));
 const tweetnacl_util_1 = __importDefault(require("tweetnacl-util"));
+/**
+ * Decodes a Uint8Array into a UTF-8 string.
+ *
+ * @param array - The input byte array.
+ * @returns The UTF-8 encoded string.
+ */
 function encodeUTF8(array) {
     const decoder = new TextDecoder();
     return decoder.decode(array);
 }
+/**
+ * Encodes a UTF-8 string into a Uint8Array.
+ *
+ * @param string - The input string.
+ * @returns The resulting Uint8Array.
+ */
 function decodeUTF8(string) {
     const encoder = new TextEncoder();
     return encoder.encode(string);
 }
+/**
+ * Encodes a Uint8Array into a Base64 string.
+ *
+ * @param array - The input byte array.
+ * @returns The Base64 encoded string.
+ */
 function encodeBase64(array) {
     return tweetnacl_util_1.default.encodeBase64(array !== null && array !== void 0 ? array : new Uint8Array());
 }
+/**
+ * Decodes a Base64 string into a Uint8Array.
+ *
+ * @param string - The Base64 string.
+ * @returns The decoded Uint8Array.
+ */
 function decodeBase64(string) {
     return tweetnacl_util_1.default.decodeBase64(string !== null && string !== void 0 ? string : "");
 }
+/**
+ * Converts a Uint8Array into a number (little-endian).
+ *
+ * @param array - The input byte array.
+ * @returns The resulting number.
+ */
 function numberFromUint8Array(array) {
     let total = 0;
     if (array)
@@ -35,6 +83,13 @@ function numberFromUint8Array(array) {
             total += array[c] << (c * 8);
     return total;
 }
+/**
+ * Converts a number into a Uint8Array of specified length (little-endian).
+ *
+ * @param number - The number to convert.
+ * @param length - The desired output length.
+ * @returns A Uint8Array representing the number.
+ */
 function numberToUint8Array(number, length) {
     if (!number)
         return new Uint8Array(length !== null && length !== void 0 ? length : 0).fill(0);
@@ -50,6 +105,12 @@ function numberToUint8Array(number, length) {
 function verifyUint8Array(a, b) {
     return tweetnacl_1.default.verify(a !== null && a !== void 0 ? a : new Uint8Array(), b !== null && b !== void 0 ? b : new Uint8Array());
 }
+/**
+ * Creates a new DoubleRatchetSession instance.
+ *
+ * @param remoteKey - The public key of the remote peer (optional).
+ * @returns A new DoubleRatchetSession.
+ */
 function createDoubleRatchetSession(remoteKey) {
     return new DoubleRatchetSessionConstructor(remoteKey);
 }
@@ -59,6 +120,10 @@ class DoubleRatchetSession {
     }
 }
 exports.DoubleRatchetSession = DoubleRatchetSession;
+/**
+ * The fixed key length (in bytes) used throughout the Double Ratchet session.
+ * Typically 32 bytes (256 bits) for symmetric keys.
+ */
 DoubleRatchetSession.keyLength = 32;
 class DoubleRatchetSessionConstructor {
     constructor(remoteKey) {
@@ -170,6 +235,12 @@ class DoubleRatchetSessionConstructor {
     }
 }
 class EncryptedPayload {
+    /**
+     * Static factory method that constructs an `EncryptedPayload` from a raw Uint8Array.
+     *
+     * @param array - A previously serialized encrypted payload.
+     * @returns An instance of `EncryptedPayload`.
+     */
     static from(array) {
         return new EncryptedPayloadConstructor(array);
     }
