@@ -24,7 +24,8 @@
   "types": "./index.d.ts",
   "scripts": {
     "test": "tsc && node ./build/test.js",
-    "build": "tsc && node ./build/build.js"
+    "build": "tsc && node ./build/build.js",
+    "publish": "npm run build && cd ./dist && npm publish --access public"
   },
   "dependencies": {
     "fast-sha256": "^1.3.0",

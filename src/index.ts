@@ -132,7 +132,7 @@ export interface DoubleRatchetSession {
      * @param payload - The message as a Uint8Array.
      * @returns An EncryptedPayload or undefined if encryption fails.
      */
-    encrypt(payload: Uint8Array): EncryptedPayload | undefined;
+    encrypt(payload?: Uint8Array): EncryptedPayload | undefined;
 
     /**
      * Decrypts an encrypted message.
@@ -140,7 +140,7 @@ export interface DoubleRatchetSession {
      * @param payload - The received encrypted message.
      * @returns The decrypted message as a Uint8Array, or undefined if decryption fails.
      */
-    decrypt(payload: Uint8Array | EncryptedPayload): Uint8Array | undefined;
+    decrypt(payload?: Uint8Array | EncryptedPayload): Uint8Array | undefined;
 
     /**
      * Export the state of the session;

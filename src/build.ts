@@ -2,6 +2,7 @@ import { promises as fs } from 'fs';
 import { join } from 'path';
 
 const buildFolder = "./build";
+const distFolder = "./dist";
 const rootFolder = ".";
 
 async function copyPath(...srcs: Array<string>) {
@@ -10,9 +11,9 @@ async function copyPath(...srcs: Array<string>) {
     await fs.mkdir(dest, { recursive: true });
     for (const src of srcs) {
         const entries = await fs.readdir(src, { withFileTypes: true });
-
+        //const ignore = (await readFile("./.gitignore", 'utf-8')).split("\n");
         for (const entry of entries) {
-            if (!entry.name.includes("build") && !entry.name.includes("test.d.ts")) {
+            if (["test.d.ts", "build", "dist", "node_modules", "src"].every(name => !entry.name.includes(name))) {
                 const srcPath = join(src, entry.name);
                 const destPath = join(dest, entry.name);
 
@@ -35,9 +36,13 @@ async function deletePath(paths: string | Array<string>) {
 
 const logError = (error: any) => console.error('Errore:', error)
 
-copyPath(buildFolder, rootFolder)
+deletePath(distFolder)
     .then(() =>
-        deletePath(buildFolder)
-            .then(() => console.log('Builded!\n'))
+        copyPath(buildFolder, rootFolder, distFolder)
+            .then(() =>
+                /*deletePath(buildFolder)
+                    .then(() => console.log('Builded!\n'))
+                    .catch(logError))*/
+                () => console.log('Builded!\n'))
             .catch(logError))
     .catch(logError);
