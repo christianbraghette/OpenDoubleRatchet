@@ -106,8 +106,8 @@ function verifyUint8Array(a?: Uint8Array, b?: Uint8Array): boolean {
  * @param remoteKey - The public key of the remote peer (optional).
  * @returns A new DoubleRatchetSession.
  */
-export function createDoubleRatchetSession(remoteKey?: Uint8Array): DoubleRatchetSession {
-    return new DoubleRatchetSessionConstructor(remoteKey);
+export function createDoubleRatchetSession(identityKey: Uint8Array, opts?: { remoteKey?: Uint8Array, remoteIdentityKey?: Uint8Array, preSharedKey?: Uint8Array }): DoubleRatchetSession {
+    return new DoubleRatchetSession(identityKey, opts);
 }
 
 /**
@@ -145,11 +145,17 @@ export interface DoubleRatchetSession {
      * @returns The decrypted message as a Uint8Array, or undefined if decryption fails.
      */
     decrypt(payload: Uint8Array | EncryptedPayload): Uint8Array | undefined;
+
+    export(): string;
 }
 export class DoubleRatchetSession {
 
-    public constructor(remoteKey?: Uint8Array) {
-        return new DoubleRatchetSessionConstructor(remoteKey);
+    public constructor(identityKey: Uint8Array, opts?: { remoteKey?: Uint8Array, remoteIdentityKey?: Uint8Array, preSharedKey?: Uint8Array }) {
+        return new DoubleRatchetSessionConstructor(identityKey, opts?.remoteKey, opts?.remoteIdentityKey, opts?.preSharedKey);
+    }
+
+    public static import(json: string): DoubleRatchetSession {
+        return DoubleRatchetSessionConstructor.import(json);
     }
 
     /**
@@ -159,23 +165,47 @@ export class DoubleRatchetSession {
     public static readonly keyLength = 32;
 }
 
+class KeyMap<K, T> extends Map<K, T> {
+    constructor(iterable?: Iterable<readonly [K, T]>) {
+        super(iterable);
+    }
+
+    get(key: K): T | undefined {
+        const out = super.get(key);
+        if (out && !super.delete(key))
+            throw new Error();
+        return out;
+    }
+}
+
 class DoubleRatchetSessionConstructor implements DoubleRatchetSession {
+    private static readonly skipLimit = 1000;
 
     private keyPair = nacl.box.keyPair();
+    private identityKeyPair: nacl.SignKeyPair;
     private _remoteKey?: Uint8Array;
+    private remoteIdentityKey?: Uint8Array;
     private rootKey?: Uint8Array;
     private sendingChain?: Uint8Array;
     private sendingCount = 0;
+    private previousCount = 0;
     private receivingChain?: Uint8Array;
     private receivingCount = 0;
-    private previusCount = 0;
-    private previusKeys: Uint8Array[] = [];
+    private previousKeys = new KeyMap<number, Uint8Array>();
 
-    public constructor(remoteKey?: Uint8Array) {
+    public constructor(identityKey: Uint8Array, remoteKey?: Uint8Array, remoteIdentityKey?: Uint8Array, preSharedKey?: Uint8Array) {
+        if (identityKey.length === nacl.sign.secretKeyLength)
+            this.identityKeyPair = nacl.sign.keyPair.fromSecretKey(identityKey);
+        else
+            throw new Error();
         if (remoteKey) {
             this._remoteKey = remoteKey;
             this.sendingChain = this.dhRatchet();
         }
+        if (remoteIdentityKey)
+            this.remoteIdentityKey = remoteIdentityKey;
+        if (preSharedKey)
+            this.rootKey = preSharedKey;
     }
 
     public get handshaked(): boolean { return this.sendingChain && this.receivingChain ? true : false; }
@@ -184,16 +214,16 @@ class DoubleRatchetSessionConstructor implements DoubleRatchetSession {
 
     public get remoteKey(): Uint8Array | undefined { return this._remoteKey; }
 
-    //public set remoteKey(key: Uint8Array) { this.setRemoteKey(key); }
-
     private setRemoteKey(key: Uint8Array): this {
         this._remoteKey = key;
         this.receivingChain = this.dhRatchet();
-        this.previusCount = this.receivingCount;
-        this.receivingCount = 0;
+        if (this.receivingCount > (EncryptedPayloadConstructor.maxCount - DoubleRatchetSessionConstructor.skipLimit * 2))
+            this.receivingCount = 0;
+        this.previousCount = this.sendingCount;
         this.keyPair = nacl.box.keyPair();
         this.sendingChain = this.dhRatchet();
-        this.sendingCount = 0;
+        if (this.sendingCount > (EncryptedPayloadConstructor.maxCount - DoubleRatchetSessionConstructor.skipLimit * 2))
+            this.sendingCount = 0;
         return this;
     }
 
@@ -201,7 +231,7 @@ class DoubleRatchetSessionConstructor implements DoubleRatchetSession {
         if (!this._remoteKey) throw new Error();
         const sharedKey = nacl.scalarMult(this.keyPair.secretKey, this._remoteKey);
         if (!this.rootKey)
-            this.rootKey = this.rootKey = hash(sharedKey);
+            this.rootKey = hash(sharedKey);
         const hashkey = hkdf(sharedKey, this.rootKey, info, DoubleRatchetSession.keyLength * 2);
         this.rootKey = hashkey.slice(0, DoubleRatchetSession.keyLength);
         return hashkey.slice(DoubleRatchetSession.keyLength);
@@ -227,10 +257,11 @@ class DoubleRatchetSessionConstructor implements DoubleRatchetSession {
         payload ??= new Uint8Array();
         try {
             const key = this.getSendingKey();
-            if (this.sendingCount >= EncryptedPayloadConstructor.maxCount || this.previusCount >= EncryptedPayloadConstructor.maxCount) throw new Error();
+            if (this.sendingCount >= EncryptedPayloadConstructor.maxCount || this.previousCount >= EncryptedPayloadConstructor.maxCount) throw new Error();
             const nonce = nacl.randomBytes(EncryptedPayloadConstructor.nonceLength);
             const ciphertext = nacl.secretbox(payload, nonce, key);
-            return new EncryptedPayloadConstructor(this.sendingCount, this.previusCount, this.keyPair.publicKey, nonce, ciphertext);
+            const encrypted = new EncryptedPayloadConstructor(this.sendingCount, this.previousCount, this.keyPair.publicKey, nonce, ciphertext);
+            return encrypted.setSignature(nacl.sign.detached(encrypted.getUnsigned().encode(), this.identityKeyPair.secretKey));
         } catch (error) {
             return undefined;
         }
@@ -241,33 +272,53 @@ class DoubleRatchetSessionConstructor implements DoubleRatchetSession {
         if (!payload) return undefined;
         try {
             const encrypted = EncryptedPayload.from(payload);
+            if (!encrypted.signature || !this.remoteIdentityKey || !nacl.sign.detached.verify(encrypted.getUnsigned().encode(), encrypted.signature, this.remoteIdentityKey))
+                return undefined;
             const publicKey = encrypted.publicKey;
             if (!verifyUint8Array(publicKey, this._remoteKey)) {
-                for (let i = this.receivingCount; i < encrypted.previous; i++) {
-                    this.previusKeys.unshift(this.getReceivingKey());
-                }
+                while (this.receivingCount < encrypted.previous)
+                    this.previousKeys.set(this.receivingCount, this.getReceivingKey());
                 this.setRemoteKey(publicKey);
             }
-            let cleartext: Uint8Array | undefined;
+            let key: Uint8Array | undefined;
             const count = encrypted.count;
             if (this.receivingCount < count) {
-                for (let i = this.receivingCount; i < count; i++) {
-                    this.previusKeys.unshift(this.getReceivingKey());
+                let i = 0;
+                while (this.receivingCount < count - 1 && i < DoubleRatchetSessionConstructor.skipLimit) {
+                    this.previousKeys.set(this.receivingCount, this.getReceivingKey());
                 }
-                const key = this.previusKeys.shift();
-                if (!key) return undefined;
-                cleartext = nacl.secretbox.open(encrypted.ciphertext, encrypted.nonce, key) ?? undefined;
+                key = this.getReceivingKey()
             } else {
-                this.previusKeys.filter((key) => {
-                    if (cleartext)
-                        return true;
-                    return !(cleartext = nacl.secretbox.open(encrypted.ciphertext, encrypted.nonce, key) ?? undefined);
-                });
+                key = this.previousKeys.get(count);
             }
-            return cleartext;
+            if (!key) return undefined;
+            return nacl.secretbox.open(encrypted.ciphertext, encrypted.nonce, key) ?? undefined;
         } catch (error) {
             return undefined;
         }
+    }
+
+    public export(): string {
+        return JSON.stringify({
+            identityKey: encodeBase64(this.identityKeyPair.secretKey),
+            remoteIdentityKey: encodeBase64(this.remoteIdentityKey),
+            remoteKey: encodeBase64(this._remoteKey),
+            rootKey: encodeBase64(this.rootKey),
+            sendingChain: encodeBase64(this.sendingChain),
+            receivingChain: encodeBase64(this.receivingChain),
+            sendingCount: this.sendingCount,
+            receivingCount: this.receivingCount
+        });
+    }
+
+    public static import(json: string): DoubleRatchetSession {
+        const data = JSON.parse(json);
+        const session = new DoubleRatchetSessionConstructor(decodeBase64(data.identityKey), decodeBase64(data.remoteKey), decodeBase64(data.remoteIdentityKey), decodeBase64(data.rootKey));
+        session.sendingChain = decodeBase64(data.sendingChain);
+        session.receivingChain = decodeBase64(data.receivingChain);
+        session.sendingCount = data.sendingCount;
+        session.receivingCount = data.receivingCount;
+        return session;
     }
 
     private static symmetricRatchet(chain: Uint8Array, salt?: Uint8Array, info?: Uint8Array) {
@@ -280,8 +331,14 @@ class DoubleRatchetSessionConstructor implements DoubleRatchetSession {
  * Interface representing an encrypted payload.
  * Provides metadata and de/serialization methods.
  */
-export interface EncryptedPayload extends Uint8Array {
-    //signed: boolean;
+export interface EncryptedPayload {
+
+    readonly signed: boolean;
+
+    /**
+     * The length of the payload.
+     */
+    readonly length: number;
 
     /**
      * The current message count of the sending chain.
@@ -308,6 +365,12 @@ export interface EncryptedPayload extends Uint8Array {
      */
     readonly ciphertext: Uint8Array;
 
+    readonly signature: Uint8Array | undefined;
+
+    setSignature(signature: Uint8Array): this;
+
+    getUnsigned(): EncryptedPayload;
+
     /**
      * Serializes the payload into a Uint8Array for transport.
      */
@@ -318,7 +381,7 @@ export interface EncryptedPayload extends Uint8Array {
      */
     decode(): {
         count: number;
-        previus: number;
+        previous: number;
         publicKey: string;
         nonce: string;
         ciphertext: string;
@@ -343,12 +406,12 @@ export class EncryptedPayload implements EncryptedPayload {
      * @param array - A previously serialized encrypted payload.
      * @returns An instance of `EncryptedPayload`.
      */
-    public static from(array: Uint8Array) {
+    public static from(array: Uint8Array | EncryptedPayload) {
         return new EncryptedPayloadConstructor(array) as EncryptedPayload;
     }
 }
 
-class EncryptedPayloadConstructor extends Uint8Array implements EncryptedPayload {
+class EncryptedPayloadConstructor implements EncryptedPayload {
     public static readonly signatureLength = nacl.sign.signatureLength;
     public static readonly secretKeyLength = nacl.box.secretKeyLength;
     public static readonly publicKeyLength = nacl.box.publicKeyLength;
@@ -357,78 +420,83 @@ class EncryptedPayloadConstructor extends Uint8Array implements EncryptedPayload
     public static readonly maxCount = 65536 //32768;
     public static readonly countLength = 2;
 
-    constructor(count: number | Uint8Array, previus: number | Uint8Array, publicKey: Uint8Array, nonce: Uint8Array, ciphertext: Uint8Array)
+    private raw: Uint8Array;
+    public signed: boolean = true;
+
+    constructor(count: number | Uint8Array, previous: number | Uint8Array, publicKey: Uint8Array, nonce: Uint8Array, ciphertext: Uint8Array, signature?: Uint8Array)
     constructor(encrypted: Uint8Array | EncryptedPayload)
     constructor(...arrays: Uint8Array[]) {
         arrays = arrays.filter(value => value !== undefined);
-        if (typeof arrays[0] === 'number') {
+        if (arrays[0] instanceof EncryptedPayloadConstructor)
+            arrays[0] = arrays[0].encode();
+        if (typeof arrays[0] === 'number')
             arrays[0] = numberToUint8Array(arrays[0], EncryptedPayloadConstructor.countLength);
-        }
-        if (typeof arrays[1] === 'number') {
+        if (typeof arrays[1] === 'number')
             arrays[1] = numberToUint8Array(arrays[1], EncryptedPayloadConstructor.countLength);
-        }
-        const uintarray = new Uint8Array(arrays.map(value => value.length).reduce((prev, curr) => prev + curr));
+        if (arrays.length > 1 && arrays.length < 6)
+            this.signed = false;
+        this.raw = new Uint8Array(arrays.map(value => value.length).reduce((prev, curr) => prev + curr));
         let offset = 0;
         arrays.forEach(arr => {
-            uintarray.set(arr, offset);
+            this.raw.set(arr, offset);
             offset += arr.length;
         })
-        super(uintarray);
     }
 
-    /*public get signed() { return (this[EncryptedPayloadConstructor.countLength - 1] & 128) > 0; }
-    public set signed(value: boolean) {
-        if (value)
-            this[EncryptedPayloadConstructor.countLength - 1] |= 128;
-        else
-            this[EncryptedPayloadConstructor.countLength - 1] &= 127;
-    }
-
-    public setSigned() {
-        this[EncryptedPayloadConstructor.countLength - 1] |= 128;
-        return this;
-    }*/
+    public get length() { return this.raw.length; }
 
     public get count() {
-        let total = numberFromUint8Array(new Uint8Array(this.buffer, ...Offsets.count.get));
+        let total = numberFromUint8Array(new Uint8Array(this.raw.buffer, ...Offsets.count.get));
         total &= 2 ** (EncryptedPayloadConstructor.countLength * 8 - 1) - 1;
         return total;
     }
 
     public get previous() {
-        return numberFromUint8Array(new Uint8Array(this.buffer, ...Offsets.previous.get));
+        return numberFromUint8Array(new Uint8Array(this.raw.buffer, ...Offsets.previous.get));
     }
 
-    public get publicKey() { return new Uint8Array(this.buffer, ...Offsets.publicKey.get); }
+    public get publicKey() { return new Uint8Array(this.raw.buffer, ...Offsets.publicKey.get); }
 
-    public get nonce() { return new Uint8Array(this.buffer, ...Offsets.nonce.get); }
+    public get nonce() { return new Uint8Array(this.raw.buffer, ...Offsets.nonce.get); }
 
-    public get ciphertext() { return new Uint8Array(this.buffer, Offsets.ciphertext.start); }
+    public get ciphertext() { return new Uint8Array(this.raw.buffer, Offsets.ciphertext.start, this.signed ? this.raw.length - EncryptedPayloadConstructor.signatureLength - Offsets.ciphertext.start : undefined); }
 
-    public encode(): Uint8Array { return new Uint8Array(this); }
+    public get signature() { return this.signed ? new Uint8Array(this.raw.buffer, this.raw.length - EncryptedPayloadConstructor.signatureLength) : undefined }
+
+    public setSignature(signature: Uint8Array): this {
+        this.raw = new Uint8Array([...this.encode(), ...signature]);
+        this.signed = true;
+        return this;
+    }
+
+    public getUnsigned(): EncryptedPayload {
+        return !this.signed ? this : EncryptedPayload.from(new Uint8Array(this.raw.buffer, 0, this.raw.length - EncryptedPayloadConstructor.signatureLength));
+    }
+
+    public encode(): Uint8Array { return new Uint8Array(this.raw); }
 
     public decode() {
         return {
             count: this.count,
-            previus: this.previous,
+            previous: this.previous,
             publicKey: encodeBase64(this.publicKey),
             nonce: encodeBase64(this.nonce),
             ciphertext: encodeUTF8(this.ciphertext),
-            //signed: this.signed
+            signature: encodeBase64(this.signature)
         }
     }
 
     public toString(): string {
-        return encodeUTF8(this);
+        return encodeUTF8(this.raw);
     }
 
     public toJSON(): string {
         return JSON.stringify(this.decode());
     }
 
-    public static from(array: Uint8Array) {
+    /*public static from(array: Uint8Array | EncryptedPayload) {
         return new EncryptedPayloadConstructor(array);
-    }
+    }*/
 }
 
 class Offsets {
