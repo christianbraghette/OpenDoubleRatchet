@@ -1,6 +1,6 @@
 # 🔐 Open Double Ratchet (TypeScript)
 
-A simple TypeScript implementation of the **Double Ratchet** protocol, commonly used in secure messaging systems (such as Signal) to provide forward secrecy and asynchronous secure communication.
+A simple TypeScript implementation of the **Double Ratchet** algorithm, commonly used in secure messaging systems (such as Signal) to provide forward secrecy and asynchronous secure communication.
 
 ## ✨ Features
 
@@ -52,8 +52,6 @@ const decrypted = encodeUTF8(bobSession.decrypt(encrypted)!);
 console.log("Decrypted message:", decrypted);
 ```
 
----
-
 ## 📚 API Reference
 
 ### `createDoubleRatchetSession(identityKey, opts): DoubleRatchetSession`
@@ -63,8 +61,6 @@ Creates a new Double Ratchet session.
 - `opts?: { remoteKey?, remoteIdentityKey?, preSharedKey? }`
 
 > ⚠️ If `remoteKey` is not provided, the sending chain will initialize upon receiving the first message.
-
----
 
 ### `DoubleRatchetSession`
 
@@ -100,8 +96,6 @@ A serializable encrypted message format.
 - `setSignature(sig: Uint8Array): this`
 - `EncryptedPayload.from(encoded: Uint8Array | EncryptedPayload): EncryptedPayload` – static method to restore from encoded data.
 
----
-
 ## 💾 Session Import/Export
 
 You can serialize the session with:
@@ -118,8 +112,6 @@ import { DoubleRatchetSession } from "./index";
 const restored = DoubleRatchetSession.import(saved);
 ```
 
----
-
 ## 🔐 Remote Identity Management
 
 Message signature verification (optional but recommended) requires the remote party's identity public key:
@@ -133,8 +125,6 @@ const alice = createDoubleRatchetSession(mySecretKey, {
 
 If omitted, the session will accept unsigned messages, which has **security implications**.
 
----
-
 ## 🧪 Testing
 
 No automated tests are currently included. You can manually test using the example above. It is recommended to add:
@@ -143,13 +133,9 @@ No automated tests are currently included. You can manually test using the examp
 - Ratcheting and out-of-order message handling
 - Import/export consistency checks
 
----
-
 ## 🛡️ Padding and Metadata Protection
 
 Encrypted messages include **random padding** to make actual length less distinguishable.
-
----
 
 ## 🔐 Security Notice
 
