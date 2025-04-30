@@ -11,10 +11,15 @@ const bob = createDoubleRatchetSession(bobId.secretKey, { remoteKey: alice.publi
 
 const ping = bob.encrypt(decodeUTF8("Ping"));
 
-console.log(ping?.decode())
 
-console.log(encodeUTF8(alice.decrypt(ping!)));
+console.log(alice.decrypt(ping!));
 
-const pong = alice.encrypt(decodeUTF8("Pong"));
+/*let c = x.length;
+while (x[c] != 255) {
+    c--;
+}
+console.log(c);*/
 
-console.log(encodeUTF8(bob.decrypt(pong!)));
+//const pong = alice.encrypt(decodeUTF8("Pong"));
+
+//console.log(encodeUTF8(bob.decrypt(pong!)));
