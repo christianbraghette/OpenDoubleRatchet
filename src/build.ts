@@ -13,7 +13,7 @@ async function copyPath(...srcs: Array<string>) {
         const entries = await fs.readdir(src, { withFileTypes: true });
         //const ignore = (await readFile("./.gitignore", 'utf-8')).split("\n");
         for (const entry of entries) {
-            if (["test.d.ts", "build", "dist", "node_modules", "src"].every(name => !entry.name.includes(name))) {
+            if (["test.d.ts", "build", "dist", "node_modules", "src", ".git"].every(name => !entry.name.includes(name) || entry.name === ".gitignore")) {
                 const srcPath = join(src, entry.name);
                 const destPath = join(dest, entry.name);
 

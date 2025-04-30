@@ -1,6 +1,6 @@
 {
   "name": "open-double-ratchet",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "description": "Double Ratchet Algoritm implementation in TypeScript",
   "keywords": [
     "cryptography",
