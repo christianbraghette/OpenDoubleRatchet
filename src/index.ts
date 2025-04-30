@@ -198,14 +198,14 @@ class DoubleRatchetSessionConstructor implements DoubleRatchetSession {
             this.identityKeyPair = nacl.sign.keyPair.fromSecretKey(identityKey);
         else
             throw new Error();
+        if (preSharedKey)
+            this.rootKey = preSharedKey;
         if (remoteKey) {
             this._remoteKey = remoteKey;
             this.sendingChain = this.dhRatchet();
         }
         if (remoteIdentityKey)
             this.remoteIdentityKey = remoteIdentityKey;
-        if (preSharedKey)
-            this.rootKey = preSharedKey;
     }
 
     public get handshaked(): boolean { return this.sendingChain && this.receivingChain ? true : false; }
@@ -333,12 +333,12 @@ class DoubleRatchetSessionConstructor implements DoubleRatchetSession {
  */
 export interface EncryptedPayload {
 
-    readonly signed: boolean;
-
     /**
      * The length of the payload.
      */
     readonly length: number;
+
+    readonly version: number;
 
     /**
      * The current message count of the sending chain.
@@ -417,13 +417,14 @@ class EncryptedPayloadConstructor implements EncryptedPayload {
     public static readonly publicKeyLength = nacl.box.publicKeyLength;
     public static readonly keyLength = nacl.secretbox.keyLength;
     public static readonly nonceLength = nacl.secretbox.nonceLength;
+    public static readonly version = 1;
     public static readonly maxCount = 65536 //32768;
     public static readonly countLength = 2;
 
     private raw: Uint8Array;
-    public signed: boolean = true;
+    private signed: boolean = true;
 
-    constructor(count: number | Uint8Array, previous: number | Uint8Array, publicKey: Uint8Array, nonce: Uint8Array, ciphertext: Uint8Array, signature?: Uint8Array)
+    constructor(count: number | Uint8Array, previous: number | Uint8Array, publicKey: Uint8Array, nonce: Uint8Array, ciphertext: Uint8Array, signature?: Uint8Array, version?: number | Uint8Array)
     constructor(encrypted: Uint8Array | EncryptedPayload)
     constructor(...arrays: Uint8Array[]) {
         arrays = arrays.filter(value => value !== undefined);
@@ -433,8 +434,11 @@ class EncryptedPayloadConstructor implements EncryptedPayload {
             arrays[0] = numberToUint8Array(arrays[0], EncryptedPayloadConstructor.countLength);
         if (typeof arrays[1] === 'number')
             arrays[1] = numberToUint8Array(arrays[1], EncryptedPayloadConstructor.countLength);
-        if (arrays.length > 1 && arrays.length < 6)
-            this.signed = false;
+        if (arrays.length > 1) {
+            if (arrays.length < 6)
+                this.signed = false;
+            arrays.unshift((typeof arrays[6] === 'number' ? numberToUint8Array(arrays[6]) : arrays[6]) ?? numberToUint8Array(EncryptedPayloadConstructor.version, 1));
+        }
         this.raw = new Uint8Array(arrays.map(value => value.length).reduce((prev, curr) => prev + curr));
         let offset = 0;
         arrays.forEach(arr => {
@@ -445,15 +449,11 @@ class EncryptedPayloadConstructor implements EncryptedPayload {
 
     public get length() { return this.raw.length; }
 
-    public get count() {
-        let total = numberFromUint8Array(new Uint8Array(this.raw.buffer, ...Offsets.count.get));
-        total &= 2 ** (EncryptedPayloadConstructor.countLength * 8 - 1) - 1;
-        return total;
-    }
+    public get version() { return numberFromUint8Array(new Uint8Array(this.raw.buffer, ...Offsets.version.get)); }
 
-    public get previous() {
-        return numberFromUint8Array(new Uint8Array(this.raw.buffer, ...Offsets.previous.get));
-    }
+    public get count() { return numberFromUint8Array(new Uint8Array(this.raw.buffer, ...Offsets.count.get)); }
+
+    public get previous() { return numberFromUint8Array(new Uint8Array(this.raw.buffer, ...Offsets.previous.get)); }
 
     public get publicKey() { return new Uint8Array(this.raw.buffer, ...Offsets.publicKey.get); }
 
@@ -477,6 +477,7 @@ class EncryptedPayloadConstructor implements EncryptedPayload {
 
     public decode() {
         return {
+            version: this.version,
             count: this.count,
             previous: this.previous,
             publicKey: encodeBase64(this.publicKey),
@@ -493,21 +494,17 @@ class EncryptedPayloadConstructor implements EncryptedPayload {
     public toJSON(): string {
         return JSON.stringify(this.decode());
     }
-
-    /*public static from(array: Uint8Array | EncryptedPayload) {
-        return new EncryptedPayloadConstructor(array);
-    }*/
 }
 
 class Offsets {
 
-    private static set<T>(start: number, length: T) {
-        class Offset<T> {
+    private static set(start: number, length?: number) {
+        class Offset {
             readonly start: number;
             readonly end?: number;
-            readonly length: T;
+            readonly length?: number;
 
-            constructor(start: number, length: T) {
+            constructor(start: number, length?: number) {
                 this.start = start;
                 this.length = length;
 
@@ -522,7 +519,11 @@ class Offsets {
         return new Offset(start, length);
     }
 
-    static readonly count = Offsets.set(0, EncryptedPayloadConstructor.countLength);
+    static readonly checksum = Offsets.set(0, 0);
+
+    static readonly version = Offsets.set(Offsets.checksum.end!, 1);
+
+    static readonly count = Offsets.set(Offsets.version.end!, EncryptedPayloadConstructor.countLength);
 
     static readonly previous = Offsets.set(Offsets.count.end!, EncryptedPayloadConstructor.countLength);
 

@@ -6,15 +6,15 @@ const bobId = nacl.sign.keyPair();
 
 const preSharedKey = nacl.randomBytes(32);
 
-const alice = createDoubleRatchetSession(aliceId.secretKey, { remoteIdentityKey: bobId.publicKey });
-const bob = createDoubleRatchetSession(bobId.secretKey, { remoteKey: alice.publicKey, remoteIdentityKey: aliceId.publicKey });
+const alice = createDoubleRatchetSession(aliceId.secretKey, { remoteIdentityKey: bobId.publicKey, preSharedKey });
+const bob = createDoubleRatchetSession(bobId.secretKey, { remoteKey: alice.publicKey, remoteIdentityKey: aliceId.publicKey, preSharedKey });
 
 const ping = bob.encrypt(decodeUTF8("Ping"));
 
 console.log(ping?.decode())
 
-console.log(alice.decrypt(ping!));
+console.log(encodeUTF8(alice.decrypt(ping!)));
 
-//const pong = alice.encrypt(decodeUTF8("Pong"));
+const pong = alice.encrypt(decodeUTF8("Pong"));
 
-//console.log(encodeUTF8(bob.decrypt(pong!)));
+console.log(encodeUTF8(bob.decrypt(pong!)));
