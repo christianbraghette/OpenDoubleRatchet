@@ -72,7 +72,7 @@ export function decodeBase64(string?: string): Uint8Array {
 export function numberFromUint8Array(array?: Uint8Array): number {
     let total = 0;
     if (array)
-        for (let c = 0; c < EncryptedPayloadConstructor.countLength; c++)
+        for (let c = 0; c < array.length; c++)
             total += array[c] << (c * 8);
     return total;
 }
