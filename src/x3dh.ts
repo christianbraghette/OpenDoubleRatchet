@@ -35,16 +35,7 @@ type ExportedBundleStore = [
 ];
 
 export class BundleStore {
-    public static readonly secretIdentityKeyLength = nacl.sign.secretKeyLength;
-    public static readonly publicIdentityKeyLength = nacl.sign.publicKeyLength;
-    public static readonly secretKeyLength = nacl.box.secretKeyLength;
-    public static readonly publicKeyLength = nacl.box.publicKeyLength;
-    public static readonly signatureLength = nacl.sign.signatureLength;
-    public static readonly keyLength = nacl.secretbox.keyLength;
-    public static readonly maxOPK = 10;
-    public static readonly version = 1;
-    public static readonly hkdfInfo = decodeUTF8("X3DH" + BundleStore.version);
-
+    private static readonly maxOPK = 10;
 
     private signKeyPair: SignKeyPair;
     private IK: BoxKeyPair;
@@ -62,24 +53,24 @@ export class BundleStore {
     public digest(message: Message): Uint8Array {
         if (Message.getType(message) !== MessageType.USER) throw new Error();
         const data = X3DH.getUnsigned(message);
-        let offset = data.length - BundleStore.signatureLength - BundleStore.publicKeyLength * 2;
-        const SPK = this.bundleStore.SPK.get(encodeUTF8(new Uint8Array(data.buffer, offset, BundleStore.publicKeyLength)));
+        let offset = data.length - X3DH.signatureLength - X3DH.publicKeyLength * 2;
+        const SPK = this.bundleStore.SPK.get(encodeUTF8(new Uint8Array(data.buffer, offset, X3DH.publicKeyLength)));
         if (!SPK) throw new Error();
         let OPK: BoxKeyPair | undefined;
-        if (offset + BundleStore.publicKeyLength < data.length) {
-            OPK = this.bundleStore.OPK.get(encodeUTF8(new Uint8Array(data.buffer, offset, BundleStore.publicKeyLength * 2)));
+        if (offset + X3DH.publicKeyLength < data.length) {
+            OPK = this.bundleStore.OPK.get(encodeUTF8(new Uint8Array(data.buffer, offset, X3DH.publicKeyLength * 2)));
             if (!OPK) throw new Error();
         }
         offset = 0;
-        const publicKey = data.subarray(offset, offset += BundleStore.publicIdentityKeyLength);
+        const publicKey = data.subarray(offset, offset += X3DH.publicIdentityKeyLength);
         if (!Message.verify(message, publicKey)) throw new Error();
-        const IK = data.subarray(offset, offset += BundleStore.publicKeyLength);
-        const EK = data.subarray(offset, offset += BundleStore.publicKeyLength);
+        const IK = data.subarray(offset, offset += X3DH.publicKeyLength);
+        const EK = data.subarray(offset, offset += X3DH.publicKeyLength);
         return hkdf(new Uint8Array([
             ...nacl.scalarMult(SPK.secretKey, IK),
             ...nacl.scalarMult(this.IK.secretKey, EK),
             ...nacl.scalarMult(SPK.secretKey, EK)
-        ]), OPK ? nacl.scalarMult(OPK.secretKey, EK) : undefined, BundleStore.hkdfInfo, BundleStore.keyLength);
+        ]), OPK ? nacl.scalarMult(OPK.secretKey, EK) : undefined, X3DH.hkdfInfo, X3DH.keyLength);
     }
 
     public generate(): Message {
@@ -99,9 +90,9 @@ export class BundleStore {
         );
     }
 
-    public generateBundle(): Bundle {
+    public generateBundle(length?: number): Bundle {
         const SPK = nacl.box.keyPair();
-        const OPK = new Array(BundleStore.maxOPK).fill(0).map(() => nacl.box.keyPair());
+        const OPK = new Array(length ?? BundleStore.maxOPK).fill(0).map(() => nacl.box.keyPair());
         const spkHash = hash(SPK.publicKey);
         this.bundleStore.SPK.set(encodeUTF8(spkHash), SPK);
         OPK.forEach(value => {
@@ -141,6 +132,14 @@ enum X3DHType {
 }
 
 namespace X3DH {
+    export const secretIdentityKeyLength = nacl.sign.secretKeyLength;
+    export const publicIdentityKeyLength = nacl.sign.publicKeyLength;
+    export const secretKeyLength = nacl.box.secretKeyLength;
+    export const publicKeyLength = nacl.box.publicKeyLength;
+    export const signatureLength = nacl.sign.signatureLength;
+    export const keyLength = nacl.secretbox.keyLength;
+    export const version = 1;
+    export const hkdfInfo = decodeUTF8("X3DH" + X3DH.version);
 
     export function create(secretKey: Uint8Array, type: 'BUNDLE' | 'MESSAGE', array: Iterable<number>): Message {
         const unsigned = X3DH.createUnsigned(type, array);
@@ -148,25 +147,25 @@ namespace X3DH {
     }
 
     export function createUnsigned(type: 'BUNDLE' | 'MESSAGE', array: Iterable<number>): Message {
-        return new Uint8Array([...BundleStore.hkdfInfo.subarray(0, -1), (BundleStore.version & 127) | (Number(X3DHType[type]) << 7), ...array]);
+        return new Uint8Array([...X3DH.hkdfInfo.subarray(0, -1), (X3DH.version & 127) | (Number(X3DHType[type]) << 7), ...array]);
     }
 
     export function getUnsigned(array: Uint8Array): Uint8Array {
-        return array.subarray(BundleStore.hkdfInfo.length, array.length - BundleStore.signatureLength);
+        return array.subarray(X3DH.hkdfInfo.length, array.length - X3DH.signatureLength);
     }
 
     export function isX3DH(array: Uint8Array): boolean {
-        return verifyUint8Array(BundleStore.hkdfInfo.subarray(0, -1), array.subarray(0, BundleStore.hkdfInfo.length - 1));
+        return verifyUint8Array(X3DH.hkdfInfo.subarray(0, -1), array.subarray(0, X3DH.hkdfInfo.length - 1));
     }
 
     export function getVersion(array: Uint8Array): number | undefined {
         if (!X3DH.isX3DH(array)) return undefined;
-        return array[BundleStore.hkdfInfo.length - 1] & 63;
+        return array[X3DH.hkdfInfo.length - 1] & 63;
     }
 
     export function getType(array: Uint8Array): X3DHType | undefined {
         if (!X3DH.isX3DH(array)) return undefined;
-        return (array[BundleStore.hkdfInfo.length - 1] & 128) >>> 7;
+        return (array[X3DH.hkdfInfo.length - 1] & 128) >>> 7;
     }
 }
 
@@ -193,7 +192,7 @@ export namespace Message {
 
     export function create(secretKey: Uint8Array, type: 'HOST' | 'USER', array: Iterable<number>): Message {
         const unsigned = X3DH.createUnsigned('MESSAGE', array);
-        unsigned[BundleStore.hkdfInfo.length - 1] = (unsigned[BundleStore.hkdfInfo.length - 1] & 191) | (MessageType[type] << 6);
+        unsigned[X3DH.hkdfInfo.length - 1] = (unsigned[X3DH.hkdfInfo.length - 1] & 191) | (MessageType[type] << 6);
         return new Uint8Array([...unsigned, ...nacl.sign.detached(unsigned, secretKey)]);
     }
 
@@ -204,14 +203,14 @@ export namespace Message {
 
     export function getType(array: Uint8Array): MessageType | undefined {
         if (!Message.isMessage(array)) return undefined;
-        return (array[BundleStore.hkdfInfo.length - 1] & 64) >>> 6;
+        return (array[X3DH.hkdfInfo.length - 1] & 64) >>> 6;
     }
 
     export function verify(array: Uint8Array, publicKey: Uint8Array): boolean {
         if (!Message.isMessage(array)) return false;
         return nacl.sign.detached.verify(
             X3DH.getUnsigned(array),
-            array.subarray(array.length - BundleStore.signatureLength),
+            array.subarray(array.length - X3DH.signatureLength),
             publicKey
         );
     }
@@ -228,37 +227,37 @@ export function initBundleStore(secretKey: Uint8Array): BundleStore | undefined 
 
 export function digestMessage(identityKey: Uint8Array, remotePublicKey: Uint8Array, message: Message): [Uint8Array | undefined, Message | undefined] {
     //try {
-        if (Message.getType(message) !== MessageType.HOST) throw new Error();
-        const signKeyPair = nacl.sign.keyPair.fromSecretKey(identityKey);
-        const IK = nacl.box.keyPair.fromSecretKey(hash(signKeyPair.secretKey));
-        if (!Message.verify(message, remotePublicKey)) throw new Error();
-        message = X3DH.getUnsigned(message);
-        let offset = 0;
-        const publicKey = message.subarray(offset, offset += BundleStore.publicIdentityKeyLength);
-        if (!verifyUint8Array(hash(remotePublicKey), publicKey)) throw new Error();
-        const remoteIK = message.subarray(offset, offset += BundleStore.publicKeyLength);
-        const EK = nacl.box.keyPair();
-        const SPK = message.subarray(offset, offset += BundleStore.publicKeyLength);
-        let OPK: Uint8Array | undefined;
-        if (offset < message.length)
-            OPK = message.subarray(offset, offset += BundleStore.publicKeyLength);
-        const sharedKey = hkdf(new Uint8Array([
-            ...nacl.scalarMult(IK.secretKey, SPK),
-            ...nacl.scalarMult(EK.secretKey, remoteIK),
-            ...nacl.scalarMult(EK.secretKey, SPK)
-        ]), OPK ? nacl.scalarMult(EK.secretKey, OPK) : undefined, BundleStore.hkdfInfo, BundleStore.keyLength);
-        return [
-            sharedKey,
-            Message.create(signKeyPair.secretKey, 'USER',
-                [
-                    ...signKeyPair.publicKey,
-                    ...IK.publicKey,
-                    ...EK.publicKey,
-                    ...hash(SPK),
-                    ...(OPK ? hash(OPK) : [])
-                ]
-            )
-        ];
+    if (Message.getType(message) !== MessageType.HOST) throw new Error();
+    const signKeyPair = nacl.sign.keyPair.fromSecretKey(identityKey);
+    const IK = nacl.box.keyPair.fromSecretKey(hash(signKeyPair.secretKey));
+    if (!Message.verify(message, remotePublicKey)) throw new Error();
+    message = X3DH.getUnsigned(message);
+    let offset = 0;
+    const publicKey = message.subarray(offset, offset += X3DH.publicIdentityKeyLength);
+    if (!verifyUint8Array(hash(remotePublicKey), publicKey)) throw new Error();
+    const remoteIK = message.subarray(offset, offset += X3DH.publicKeyLength);
+    const EK = nacl.box.keyPair();
+    const SPK = message.subarray(offset, offset += X3DH.publicKeyLength);
+    let OPK: Uint8Array | undefined;
+    if (offset < message.length)
+        OPK = message.subarray(offset, offset += X3DH.publicKeyLength);
+    const sharedKey = hkdf(new Uint8Array([
+        ...nacl.scalarMult(IK.secretKey, SPK),
+        ...nacl.scalarMult(EK.secretKey, remoteIK),
+        ...nacl.scalarMult(EK.secretKey, SPK)
+    ]), OPK ? nacl.scalarMult(EK.secretKey, OPK) : undefined, X3DH.hkdfInfo, X3DH.keyLength);
+    return [
+        sharedKey,
+        Message.create(signKeyPair.secretKey, 'USER',
+            [
+                ...signKeyPair.publicKey,
+                ...IK.publicKey,
+                ...EK.publicKey,
+                ...hash(SPK),
+                ...(OPK ? hash(OPK) : [])
+            ]
+        )
+    ];
     /*} catch (error) {
         return [undefined, undefined];
     }*/
@@ -268,11 +267,11 @@ export function digestMessage(identityKey: Uint8Array, remotePublicKey: Uint8Arr
 /*public static unpack(bundle: Bundle, index?: number): Message | undefined {
         const message = X3DH.getUnsigned(bundle);
         let offset = 0;
-        const IK = message.subarray(offset, offset += BundleStore.publicKeyLength);
-        const SPK = message.subarray(offset, offset += BundleStore.publicKeyLength);
-        const length = BundleStore.publicKeyLength + BundleStore.signatureLength;
+        const IK = message.subarray(offset, offset += X3DH.publicKeyLength);
+        const SPK = message.subarray(offset, offset += X3DH.publicKeyLength);
+        const length = X3DH.publicKeyLength + X3DH.signatureLength;
         offset += (index ?? Math.floor(Math.random() * ((bundle.length - offset) / length))) * length;
-        const OPK = message.subarray(offset, offset += BundleStore.keyLength);
-        const signature = message.subarray(offset, offset += BundleStore.signatureLength);
+        const OPK = message.subarray(offset, offset += X3DH.keyLength);
+        const signature = message.subarray(offset, offset += X3DH.signatureLength);
         return X3DH.createUnsigned('MESSAGE', new Uint8Array([...IK, ...SPK, ...OPK, ...signature]));
     }*/
