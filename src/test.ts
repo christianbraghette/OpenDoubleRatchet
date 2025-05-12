@@ -1,22 +1,22 @@
 import nacl from "tweetnacl";
-import { createDoubleRatchetSession, decodeUTF8, DoubleRatchetSession, encodeUTF8, EncryptedPayload, digestX3DHBundle, initX3DHBundleStore } from "./index.js";
+import { createSession, decodeUTF8, encodeUTF8, digestMessage, initBundleStore } from "./index.js";
 
 const aliceId = nacl.sign.keyPair();
 const bobId = nacl.sign.keyPair();
 
-const x3dh = initX3DHBundleStore(aliceId.secretKey)!;
+const x3dh = initBundleStore(aliceId.secretKey)!;
 
-const bundle = x3dh.generate();
-console.log(bundle);
+const alicemessage = x3dh.generate();
+console.log(alicemessage);
 
-const [bobshared, bobmessage] = digestX3DHBundle(bobId.secretKey, aliceId.publicKey, bundle);
+const [bobshared, bobmessage] = digestMessage(bobId.secretKey, aliceId.publicKey, alicemessage);
 
 console.log(bobmessage);
 
 const aliceShared = x3dh.digest(bobmessage!);
 
-const alice = createDoubleRatchetSession(aliceId.secretKey, { remoteIdentityKey: bobId.publicKey, preSharedKey: aliceShared });
-const bob = createDoubleRatchetSession(bobId.secretKey, { remoteKey: alice.publicKey, remoteIdentityKey: aliceId.publicKey, preSharedKey: bobshared });
+const alice = createSession(aliceId.secretKey, { remoteIdentityKey: bobId.publicKey, preSharedKey: aliceShared });
+const bob = createSession(bobId.secretKey, { remoteKey: alice.publicKey, remoteIdentityKey: aliceId.publicKey, preSharedKey: bobshared });
 
 const ping = bob.encrypt(decodeUTF8("Ping"));
 

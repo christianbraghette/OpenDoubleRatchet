@@ -22,20 +22,20 @@ import nacl from "tweetnacl";
 import { concatUint8Array, decodeBase64, encodeBase64, encodeUTF8, KeyMap, numberFromUint8Array, numberToUint8Array, verifyUint8Array } from "./utils.js";
 
 /**
- * Creates a new DoubleRatchetSession instance.
+ * Creates a new Session instance.
  *
  * @param remoteKey - The public key of the remote peer (optional).
- * @returns A new DoubleRatchetSession.
+ * @returns A new Session.
  */
-export function createDoubleRatchetSession(identityKey: Uint8Array, opts?: { remoteKey?: Uint8Array, remoteIdentityKey?: Uint8Array, preSharedKey?: Uint8Array }): DoubleRatchetSession {
-    return new DoubleRatchetSession(identityKey, opts);
+export function createSession(identityKey: Uint8Array, opts?: { remoteKey?: Uint8Array, remoteIdentityKey?: Uint8Array, preSharedKey?: Uint8Array }): Session {
+    return new Session(identityKey, opts);
 }
 
 /**
  * Represents a secure Double Ratchet session.
  * Used for forward-secure encryption and decryption of messages.
  */
-export class DoubleRatchetSession {
+export class Session {
     private static readonly skipLimit = 1000;
     public static readonly version = 1;
 
@@ -82,12 +82,12 @@ export class DoubleRatchetSession {
     private setRemoteKey(key: Uint8Array): this {
         this._remoteKey = key;
         this.receivingChain = this.dhRatchet();
-        if (this.receivingCount > (EncryptedPayloadConstructor.maxCount - DoubleRatchetSession.skipLimit * 2))
+        if (this.receivingCount > (EncryptedPayloadConstructor.maxCount - Session.skipLimit * 2))
             this.receivingCount = 0;
         this.previousCount = this.sendingCount;
         this.keyPair = nacl.box.keyPair();
         this.sendingChain = this.dhRatchet();
-        if (this.sendingCount > (EncryptedPayloadConstructor.maxCount - DoubleRatchetSession.skipLimit * 2))
+        if (this.sendingCount > (EncryptedPayloadConstructor.maxCount - Session.skipLimit * 2))
             this.sendingCount = 0;
         return this;
     }
@@ -97,14 +97,14 @@ export class DoubleRatchetSession {
         const sharedKey = nacl.scalarMult(this.keyPair.secretKey, this._remoteKey);
         if (!this.rootKey)
             this.rootKey = hash(sharedKey);
-        const hashkey = hkdf(sharedKey, this.rootKey, info, DoubleRatchetSession.keyLength * 2);
-        this.rootKey = hashkey.slice(0, DoubleRatchetSession.keyLength);
-        return hashkey.slice(DoubleRatchetSession.keyLength);
+        const hashkey = hkdf(sharedKey, this.rootKey, info, Session.keyLength * 2);
+        this.rootKey = hashkey.slice(0, Session.keyLength);
+        return hashkey.slice(Session.keyLength);
     }
 
     private getSendingKey() {
         if (!this.sendingChain) throw new Error;
-        const out = DoubleRatchetSession.symmetricRatchet(this.sendingChain);
+        const out = Session.symmetricRatchet(this.sendingChain);
         this.sendingChain = out[0];
         this.sendingCount++;
         return out[1];
@@ -112,7 +112,7 @@ export class DoubleRatchetSession {
 
     private getReceivingKey() {
         if (!this.receivingChain) throw new Error();
-        const out = DoubleRatchetSession.symmetricRatchet(this.receivingChain);
+        const out = Session.symmetricRatchet(this.receivingChain);
         this.receivingChain = out[0];
         this.receivingCount++;
         return out[1];
@@ -161,7 +161,7 @@ export class DoubleRatchetSession {
             const count = encrypted.count;
             if (this.receivingCount < count) {
                 let i = 0;
-                while (this.receivingCount < count - 1 && i < DoubleRatchetSession.skipLimit) {
+                while (this.receivingCount < count - 1 && i < Session.skipLimit) {
                     this.previousKeys.set(this.receivingCount, this.getReceivingKey());
                 }
                 key = this.getReceivingKey()
@@ -198,9 +198,9 @@ export class DoubleRatchetSession {
      * @param json string returned by `export()` method.
      * @returns session with the state parsed.
      */
-    public static import(json: string): DoubleRatchetSession {
+    public static import(json: string): Session {
         const data = JSON.parse(json);
-        const session = new DoubleRatchetSession(decodeBase64(data.identityKey), { remoteKey: decodeBase64(data.remoteKey), remoteIdentityKey: decodeBase64(data.remoteIdentityKey), preSharedKey: decodeBase64(data.rootKey) });
+        const session = new Session(decodeBase64(data.identityKey), { remoteKey: decodeBase64(data.remoteKey), remoteIdentityKey: decodeBase64(data.remoteIdentityKey), preSharedKey: decodeBase64(data.rootKey) });
         session.sendingChain = decodeBase64(data.sendingChain);
         session.receivingChain = decodeBase64(data.receivingChain);
         session.sendingCount = data.sendingCount;
@@ -215,8 +215,8 @@ export class DoubleRatchetSession {
     public static readonly keyLength = 32;
 
     private static symmetricRatchet(chain: Uint8Array, salt?: Uint8Array, info?: Uint8Array) {
-        const hash = hkdf(chain, salt, info, DoubleRatchetSession.keyLength * 2);
-        return [new Uint8Array(hash.buffer, 0, DoubleRatchetSession.keyLength), new Uint8Array(hash.buffer, DoubleRatchetSession.keyLength)]
+        const hash = hkdf(chain, salt, info, Session.keyLength * 2);
+        return [new Uint8Array(hash.buffer, 0, Session.keyLength), new Uint8Array(hash.buffer, Session.keyLength)]
     }
 }
 
@@ -347,7 +347,7 @@ class EncryptedPayloadConstructor implements EncryptedPayload {
         if (arrays.length > 1) {
             if (arrays.length < 6)
                 this.signed = false;
-            arrays.unshift((typeof arrays[6] === 'number' ? numberToUint8Array(arrays[6]) : arrays[6]) ?? numberToUint8Array(DoubleRatchetSession.version));
+            arrays.unshift((typeof arrays[6] === 'number' ? numberToUint8Array(arrays[6]) : arrays[6]) ?? numberToUint8Array(Session.version));
         } else {
             EncryptedPayloadConstructor.unpad(arrays[0]);
         }

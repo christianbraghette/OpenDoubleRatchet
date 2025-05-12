@@ -8,14 +8,15 @@ export {
 } from './utils.js';
 
 export {
-    createDoubleRatchetSession,
-    DoubleRatchetSession,
+    createSession,
+    Session,
     EncryptedPayload
 } from './session.js';
 
 export {
-    X3DHBundleStore,
-    X3DHBundle,
-    initX3DHBundleStore,
-    digestX3DHBundle,
+    BundleStore,
+    Bundle,
+    Message,
+    initBundleStore,
+    digestMessage,
 } from './x3dh.js'
